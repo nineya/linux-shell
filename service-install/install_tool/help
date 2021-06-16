@@ -1,0 +1,19 @@
+Usage $COMMEND_NAME [-options]
+
+where options include:
+    -v	version		prints the version information for $SERVICE_NAME
+
+	start		manually start $SERVICE_NAME
+	stop		manually stop the $SERVICE_NAME run
+	restart		manually restart $SERVICE_NAME
+	status		prints the status information of $SERVICE_NAME
+
+	enable		let $SERVICE_NAME boot on the system\033[33m(enabled by default)\033[0m
+	disable		disable automatic boot of the $SERVICE_NAME system
+
+	uninstall	uninstall the $SERVICE_NAME program
+			\033[31mall files of the program will be deleted, including running data
+			in the in stallation directory.
+			\033[33m(root account is required to execute)\033[0m
+
+    -?	help		Print Help Information

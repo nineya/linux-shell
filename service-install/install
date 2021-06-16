@@ -1,0 +1,416 @@
+#!/bin/bash
+##########################
+## Environment variable configuration
+# This is some of the environment is not willing to change the configuration for
+# ordinary users, in general the default configuration can be.Modifying the configuration
+# if you are not familiar with the installer may cause the program to fail.
+
+# The current installer directory
+CURRENT_PATH=$(cd `dirname $0`; pwd)
+
+# Config file path
+CONFIG_FILE=config
+
+# Install tool directory path
+INSTALL_TOOL=install_tool
+# Logo file path
+LOGO_FILE=$INSTALL_TOOL/logo
+# Install help file path
+INSTALL_HELP_FILE=$INSTALL_TOOL/install_help
+# Service file path
+SERVICE_TEMPLATE_FILE=$INSTALL_TOOL/service
+# Commend file path
+COMMEND_FILE=$INSTALL_TOOL/commend
+# Help file path
+HELP_FILE=$INSTALL_TOOL/help
+# System service file path
+SYSTEM_SERVICE_PATH=/etc/systemd/system
+# System commend file path
+SYSTEM_COMMEND_PATH=/usr/bin
+# Cache path to clear the environment
+CLEAR_BACKUP=$INSTALL_TOOL/back/$(date +%Y%m%d%H%M%S)
+
+##########################
+## Ready to run environment
+# Initialize the environment variable to prepare the environment in which the program will run
+source $CURRENT_PATH/$CONFIG_FILE
+
+if [ -z "$SERVICE_DESC" ]; then
+  SERVICE_DESC="This is $SERVICE_NAME service."
+fi
+if [ -z "$VERSION" ]; then
+  $VERSION="1.0.0"
+fi
+if [ -z "$COMMEND_NAME" ]; then
+  COMMEND_NAME=$SERVICE_NAME
+fi
+if [ -z "$JAVA_HOME" ]; then
+    JAVA_BIN="`which java 2>/dev/null || type java 2>&1`"
+    test -x "$JAVA_BIN" && JAVA_HOME="`dirname $JAVA_BIN`"
+    test ".$JAVA_HOME" != . && JAVA_HOME=`cd "$JAVA_HOME/.." >/dev/null; pwd`
+else
+    JAVA_BIN="$JAVA_HOME/bin/java"
+fi
+if [ -z "$INSTALL_PATH" ]; then
+  INSTALL_PATH=/opt/$SERVICE_NAME
+fi
+
+##########################
+## Log message printing module
+
+# Print message
+function message_print {
+  color=""
+  if [ -n "$3" ]; then
+    color=";$3"
+  fi
+  level=""
+  space=""
+  if [ -n "$2" ]; then
+    level="\033[7${color}m[$2\t]"
+    space="  "
+  fi
+  echo -e "$level\033[0${color}m${space}$1\033[0m";
+}
+
+# Print Error Log
+function error {
+  message_print "$1" ERROR 31
+}
+
+# Print Error Log and exit
+function error_exit {
+  error "$1" 1>&2
+  exit 1
+}
+
+# Print Warning Log
+function warn {
+  message_print "$1" WARN 33
+}
+
+# Print Info Log
+function info {
+  message_print "$1" INFO 34
+}
+
+# Print DEBUG Log
+function debug {
+  message_print "$1" DEBUG
+}
+
+# Print Success Log
+function success {
+  message_print "\n  $1" "" 32
+}
+
+##########################
+## Information printing function
+# Some very basic information printing functions
+
+# Replaces the file contents with the value of the current environment variable
+function conetnt_replace {
+  content=$1
+  content=${content//'$0'/$0}
+  content=${content//'$SERVICE_NAME'/$SERVICE_NAME}
+  content=${content//'$CONFIG_FILE'/$CONFIG_FILE}
+  content=${content//'$SERVICE_DESC'/$SERVICE_DESC}
+  content=${content//'$JAVA_BIN'/$JAVA_BIN}
+  content=${content//'$JVM_OPTIONS'/$JVM_OPTIONS}
+  content=${content//'$INSTALL_PATH'/$INSTALL_PATH}
+  content=${content//'$SERVICE_FILE'/$SERVICE_FILE}
+  content=${content//'$MAIN_FUNCTION'/$MAIN_FUNCTION}
+  content=${content//'$PROGRAM_ARGUMENTS'/$PROGRAM_ARGUMENTS}
+  content=${content//'$COMMEND_NAME'/$COMMEND_NAME}
+  content=${content//'$VERSION'/$VERSION}
+  content=${content//'$SYSTEM_SERVICE_PATH'/$SYSTEM_SERVICE_PATH}
+  content=${content//'$SYSTEM_COMMEND_PATH'/$SYSTEM_COMMEND_PATH}
+  echo "$content"
+}
+
+# Print logo
+function logo_print {
+  echo "$(cat ${CURRENT_PATH}/$LOGO_FILE)"
+}
+
+# Print version
+function version_print {
+  echo -e "\t\033[1;36m${SERVICE_NAME}\033[0;33m  ${VERSION}\033[0m"
+}
+
+# Print information
+function info_print {
+  echo "The application of information:"
+  echo -e "     Service Name\t:  $SERVICE_NAME"
+  echo -e "     Service File\t:  $SERVICE_FILE"
+  echo -e "     Service Desc\t:  $SERVICE_DESC"
+  echo -e "     Current Path\t:  $CURRENT_PATH"
+  echo -e "     Install Path\t:  $INSTALL_PATH"
+  echo -e "     JAVA_HOME  \t:  $JAVA_HOME"
+  echo -e "     JVM Options\t:  $JVM_OPTIONS"
+  echo -e "     Arguments  \t:  $PROGRAM_ARGUMENTS"
+  echo -e "     Lib Path   \t:  $LIB_PATH"
+  echo -e "     Commend Name\t:  $COMMEND_NAME"
+}
+
+# Print help
+function help_print {
+  help_content=$(conetnt_replace "`cat ${CURRENT_PATH}/$INSTALL_HELP_FILE`")
+  echo -e "$help_content"
+}
+
+########################
+## The core function
+# Some functions that will be used in more than one place.
+
+# Asserts that a file or directory exists
+function assert_exist {
+  path=${CURRENT_PATH}/$1
+  if [[ ${path:0-1} == "*" ]]; then
+    path=${path%*/*}
+  fi
+  if [ ! -e "$path" ]; then
+    error "cannot stat $path: No such file or directory"
+    error_exit "setup may be corrupted"
+  fi
+}
+
+# Asserts that a file or directory does not exist
+function assert_not_exist {
+  path=$1
+  if [[ ${path:0-1} == "*" ]]; then
+    path=${path%*/*}
+  fi
+  if [ -e "$path" ]; then
+    msg=$2
+    if [ -z "$2" ]; then
+      msg="file or directory already exists"
+    fi
+    error_exit "$1: $msg"
+  fi
+}
+
+# Assertion string is not null
+function assert_null {
+  if [ -z "$1" ]; then
+    error_exit "$2: can't be null"
+  fi
+}
+
+# The directory is created if the path does not exist
+function mkdir_dir {
+  if [ -e "$1" ]; then
+    if [ ! -d "$1" ]; then
+      error_exit "$1: the installation path has a file of the same name"
+    fi
+  else
+    mkdir -p $1
+    debug "create directory: $1"
+  fi
+}
+
+# Copy program file
+function copy_file {
+  path=$INSTALL_PATH/$(dirname $1)
+  mkdir_dir $path
+  cp -r $CURRENT_PATH/$1 $path
+  debug "copy program file: $INSTALL_PATH/$1"
+}
+
+#########################
+## Check the installation environment
+
+# Check program integrity.
+function check_program {
+  info "Begin checking program integrity"
+  debug "check environment variables"
+  assert_null "$JAVA_HOME" "JAVA_HOME"
+  assert_null "$SERVICE_NAME" "SERVICE_NAME"
+  assert_null "$SERVICE_FILE" "SERVICE_FILE"
+  assert_null "$MAIN_FUNCTION" "MAIN_FUNCTION"
+  debug "check installer integrity"
+  assert_exist $CONFIG
+  assert_exist $INSTALL_TOOL
+  assert_exist $LOGO_FILE
+  assert_exist $INSTALL_HELP_FILE
+  assert_exist $HELP_FILE
+  if [ -f "$INSTALL_PATH" ]; then
+    error_exit "$INSTALL_PATH: the installation path has a file of the same name"
+  fi
+  if [ -d "$INSTALL_PATH" ]; then
+    warn "the installation path already exists"
+    if [ "$INSTALL_PATH" == "$CURRENT_PATH" ]; then
+      warn "the installation directory is the current directory"
+    elif [ "$(ls -A $INSTALL_PATH)" ]; then
+      error_exit "$INSTALL_PATH the installation path is not Empty"
+    fi
+  fi
+  debug "checking service file integrity"
+  assert_exist $SERVICE_FILE
+  for file in ${LIB_PATH//,/ };
+  do
+    assert_exist $file
+  done
+}
+
+# Check the system environment
+# Only required when installing services and commands
+function check_system {
+  info "Begin checking system environment"
+  if [ `id -u` -ne 0 ]; then
+    error "Installing scripts requires root user privileges"
+  fi
+  debug "check if the $SERVICE_NAME service already exists"
+  assert_not_exist "${SYSTEM_SERVICE_PATH}/${SERVICE_NAME}.service" "service file exists"
+  if [ -n "`systemctl status $SERVICE_NAME 2>/dev/null`" ]; then
+    error_exit "$SERVICE_NAME service already exists"
+  fi
+  debug "check if the service command $COMMEND_NAME is available."
+  assert_not_exist "${SYSTEM_COMMEND_PATH}/${COMMEND_NAME}" "command file exists"
+  commend_flag="`type $COMMEND_NAME 2>/dev/null`"
+  if [ -n "$commend_flag" ]; then
+    error "$commend_flag"
+    error_exit "command $COMMEND_NAME already exists"
+  fi
+}
+
+#########################
+## The installation
+
+# Setup program, copy the program files to the installation path
+function install_program {
+  info "Start installing the application"
+  if [ "$INSTALL_PATH" == "$CURRENT_PATH" ]; then
+    warn "the installation path is the current path, skipping the program installation steps"
+    return
+  fi
+  mkdir_dir $INSTALL_PATH
+  copy_file $SERVICE_FILE
+  for file in ${LIB_PATH//,/ };
+  do
+    copy_file $file
+  done
+}
+
+# Start installing services and program control commands
+function install_service {
+  info "Start installing services and program control commands"
+  path="$SYSTEM_SERVICE_PATH/${SERVICE_NAME}.service"
+  echo "$(conetnt_replace "`cat ${CURRENT_PATH}/$SERVICE_TEMPLATE_FILE`")"  > $path
+  chmod u+x $path
+  systemctl daemon-reload
+  debug "generate the Service file: $path"
+  systemctl enable ${SERVICE_NAME}
+  debug "the service will start from the boot"
+  path="$SYSTEM_COMMEND_PATH/$COMMEND_NAME"
+  help_content=$(conetnt_replace "`cat ${CURRENT_PATH}/$HELP_FILE`")
+  commend_content=$(conetnt_replace "`cat ${CURRENT_PATH}/$COMMEND_FILE`")
+  commend_content=${commend_content//'$HELP_CONTENT'/$help_content}
+  echo "$commend_content" > $path
+  chmod u+x $path
+  debug "generate the Commend file: $path"
+}
+
+##########################
+## Clean up the installation environment
+
+# Clear the installed program contents
+function clear_program {
+  info "Begin cleaning up the application environment"
+  if [ "$INSTALL_PATH" == "$CURRENT_PATH" ]; then
+    warn "the installation path is the current path, program cleaning cannot be carried out, service cleaning is not affected"
+    return 
+  fi
+  if [ -e $INSTALL_PATH ]; then
+    mkdir_dir $CURRENT_PATH/$CLEAR_BACKUP
+    mv $INSTALL_PATH $CURRENT_PATH/$CLEAR_BACKUP
+  fi
+}
+
+# Clean up service and system commands
+function clear_service {
+  info "Begin cleaning up service and system commands"
+  path="$SYSTEM_SERVICE_PATH/${SERVICE_NAME}.service"
+  if [ -e "$path" ]; then
+    debug "clear the Service file"
+    mkdir_dir $CURRENT_PATH/$CLEAR_BACKUP
+    mv $path $CURRENT_PATH/$CLEAR_BACKUP
+    systemctl daemon-reload
+  fi
+  path="$SYSTEM_COMMEND_PATH/$COMMEND_NAME"
+  if [ -e "$path" ]; then
+    debug "clear the program control command"
+    mkdir_dir $CURRENT_PATH/$CLEAR_BACKUP
+    mv $path $CURRENT_PATH/$CLEAR_BACKUP
+  fi
+}
+
+##########################
+## Program execution
+# The program execution flow selected according to the parameters.
+
+# Print application version, installer configuration, etc.
+function version {
+  version_print
+  info_print
+}
+
+# Check the environment
+function check {
+  check_program
+  check_system
+  info_print
+  success "All check the success"
+}
+
+# Install service
+function install {
+  check_program
+  check_system
+  info_print
+  success "All inspection items have passed"
+  install_program
+  install_service
+  success "Install the success"
+}
+
+# Print Help Information
+function help {
+  version_print
+  help_print
+}
+
+# Clean up the installation environment
+function clear_all {
+  clear_program
+  clear_service
+  info "environment cleanup data has been moved to the backup path"
+  info "backup path: \033[33m$CURRENT_PATH/$CLEAR_BACKUP"
+  success "The installation environment was cleaned successfully"
+}
+
+
+##########################
+## Execute a program
+# Executes the corresponding branch content according to the passed parameter.
+
+logo_print
+
+case "$1" in
+  '-v' | 'version')
+    version
+    ;;
+  '-c' | 'check')
+    check
+    ;;
+  '--clear-all')
+    clear_all
+    ;;
+  '')
+    install
+    ;;
+  *)
+    help
+esac
+
+success "All executed successfully."

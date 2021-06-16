@@ -1,0 +1,50 @@
+#!/bin/bash
+function version {
+  echo -e "$SERVICE_NAME version \033[33m$VERSION\033[0m"
+}
+
+function uninstall {
+  if [ `id -u` -ne 0 ]; then
+    echo -e "\033[31mUninstall requires a root account to continue\033[0m" 1>&2
+    exit 1
+  fi
+  echo -e "The uninstall_path will delete the \033[33m$INSTALL_PATH\033[0m directory. Please make sure it can be removed"
+  while true
+  do
+    if [[ "$flag" =~ ^[Yy](es|ES){0,1}$ ]]; then
+      rm -rf $INSTALL_PATH
+      rm -rf $SYSTEM_SERVICE_PATH/$SERVICE_NAME.service
+      systemctl daemon-reload
+      rm -rf $SYSTEM_COMMEND_PATH/$COMMEND_NAME
+      break
+    fi
+    if [[ "$flag" =~ ^[Nn](o|O){0,1}$ ]]; then
+      echo "You have cancelled the uninstall"
+      return
+    fi
+    echo -n "Do you want to continue uninstalling?(Y/N)"
+    read flag
+  done
+  echo "Uninstall completed, thanks for using"
+}
+
+function help {
+  echo -e "$HELP_CONTENT"
+}
+
+#################################
+## Select the branch run according to the parameters
+case "$1" in
+  'start' | 'stop' | 'restart' | 'status' | 'enable' | 'disable')
+    systemctl $1 $SERVICE_NAME
+    ;;
+  '-v' | 'version')
+    version
+    ;;
+  'uninstall')
+    uninstall
+    ;;
+  *)
+    help
+esac
+

@@ -1,0 +1,23 @@
+
+    \033[32mThanks for using the $SERVICE_NAME service, you will need to manually configure
+the \033[33m$CONFIG_FILE\033[32m file before proceeding with the installation.\033[0m
+
+Usage: $0 [-options]
+	\033[33m(Installing scripts requires root user privileges)\033[0m
+
+  The script parameter is allowed to be null. When it is null, the installer 
+is proceeding normally.
+
+where options include:
+    -v | version	Print the installer version and environment information
+    -c | check		Check the installer is complete and the system environment
+			is normal.
+
+    --clear-all		If you have previously installed a service and want to
+			reinstall it, but the environment validation failed, you
+			can use the current command to clean up the remaining
+			service files.
+			\033[31m(Please ensure that the config is configured correctly
+			before execution to avoid accidental deletion of files)\033[0m
+
+    -? | -help		Print Help Information

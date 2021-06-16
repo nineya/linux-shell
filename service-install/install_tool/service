@@ -1,0 +1,17 @@
+[Unit]
+Description=$SERVICE_DESC
+Documentation=https://halo.run
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$JAVA_BIN $JVM_OPTIONS -cp $INSTALL_PATH/lib/*:$INSTALL_PATH/$SERVICE_FILE $MAIN_FUNCTION $PROGRAM_ARGUMENTS
+ExecStop=/bin/kill -s QUIT $MAINPID
+Restart=always
+StandOutput=syslog
+
+StandError=inherit
+
+[Install]
+WantedBy=multi-user.target
