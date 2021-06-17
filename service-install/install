@@ -8,8 +8,10 @@
 # The current installer directory
 CURRENT_PATH=$(cd `dirname $0`; pwd)
 
+# Service install version
+INSTALL_VERSION=1.2.0
 # Config file path
-CONFIG_FILE=config
+CONFIG_FILE=app.config
 
 # Install tool directory path
 INSTALL_TOOL=install_tool
@@ -33,13 +35,15 @@ CLEAR_BACKUP=$INSTALL_TOOL/back/$(date +%Y%m%d%H%M%S)
 ##########################
 ## Ready to run environment
 # Initialize the environment variable to prepare the environment in which the program will run
+cd $CURRENT_PATH
+
 source $CURRENT_PATH/$CONFIG_FILE
 
-if [ -z "$SERVICE_DESC" ]; then
-  SERVICE_DESC="This is $SERVICE_NAME service."
-fi
 if [ -z "$VERSION" ]; then
   $VERSION="1.0.0"
+fi
+if [ -z "$SERVICE_DESC" ]; then
+  SERVICE_DESC="This is $SERVICE_NAME $VERSION service."
 fi
 if [ -z "$COMMEND_NAME" ]; then
   COMMEND_NAME=$SERVICE_NAME
@@ -135,7 +139,8 @@ function logo_print {
 
 # Print version
 function version_print {
-  echo -e "\t\033[1;36m${SERVICE_NAME}\033[0;33m  ${VERSION}\033[0m"
+  echo -e "\n    Service Install  $INSTALL_VERSION"
+  echo -e "    \033[1;36m${SERVICE_NAME}\033[0;33m  ${VERSION}\033[0m"
 }
 
 # Print information
@@ -165,28 +170,37 @@ function help_print {
 
 # Asserts that a file or directory exists
 function assert_exist {
-  path=${CURRENT_PATH}/$1
+  path=$1
+  if [ "${path:0:1}" != "/" ]; then
+    path=${CURRENT_PATH}/$path
+  fi
   if [[ ${path:0-1} == "*" ]]; then
     path=${path%*/*}
-  fi
+  fi 
   if [ ! -e "$path" ]; then
-    error "cannot stat $path: No such file or directory"
-    error_exit "setup may be corrupted"
+    msg=$2
+    if [ -z "$2" ]; then
+      msg="No such file or directory"
+    fi
+    error_exit "cannot stat $path: $msg"
   fi
 }
 
 # Asserts that a file or directory does not exist
 function assert_not_exist {
   path=$1
+  if [ "${path:0:1}" != "/" ]; then
+    path=${CURRENT_PATH}/$path
+  fi
   if [[ ${path:0-1} == "*" ]]; then
     path=${path%*/*}
   fi
   if [ -e "$path" ]; then
     msg=$2
     if [ -z "$2" ]; then
-      msg="file or directory already exists"
+      msg="File or directory already exists"
     fi
-    error_exit "$1: $msg"
+    error_exit "cannot stat $path: $msg"
   fi
 }
 
@@ -223,6 +237,9 @@ function copy_file {
 # Check program integrity.
 function check_program {
   info "Begin checking program integrity"
+  if [ `id -u` -ne 0 ]; then
+    error "Installing scripts requires root user privileges"
+  fi
   debug "check environment variables"
   assert_null "$JAVA_HOME" "JAVA_HOME"
   assert_null "$SERVICE_NAME" "SERVICE_NAME"
@@ -234,17 +251,6 @@ function check_program {
   assert_exist $LOGO_FILE
   assert_exist $INSTALL_HELP_FILE
   assert_exist $HELP_FILE
-  if [ -f "$INSTALL_PATH" ]; then
-    error_exit "$INSTALL_PATH: the installation path has a file of the same name"
-  fi
-  if [ -d "$INSTALL_PATH" ]; then
-    warn "the installation path already exists"
-    if [ "$INSTALL_PATH" == "$CURRENT_PATH" ]; then
-      warn "the installation directory is the current directory"
-    elif [ "$(ls -A $INSTALL_PATH)" ]; then
-      error_exit "$INSTALL_PATH the installation path is not Empty"
-    fi
-  fi
   debug "checking service file integrity"
   assert_exist $SERVICE_FILE
   for file in ${LIB_PATH//,/ };
@@ -253,24 +259,63 @@ function check_program {
   done
 }
 
-# Check the system environment
+# Check the install environment
+# Check that the installation environment is normal at the time of installation
 # Only required when installing services and commands
-function check_system {
-  info "Begin checking system environment"
-  if [ `id -u` -ne 0 ]; then
-    error "Installing scripts requires root user privileges"
+function check_install {
+  info "Begin checking install environment"
+  debug "check the installation path"
+  if [ -d "$INSTALL_PATH" ]; then
+    warn "the installation path already exists"
+    if [ "$INSTALL_PATH" == "$CURRENT_PATH" ]; then
+      warn "the installation directory is the current directory"
+    elif [ "$(ls -A $INSTALL_PATH)" ]; then
+      error_exit "$INSTALL_PATH the installation path is not Empty"
+    fi
+  elif [ -e "$INSTALL_PATH" ]; then
+    error_exit "$INSTALL_PATH: the installation path has a file of the same name"
   fi
   debug "check if the $SERVICE_NAME service already exists"
   assert_not_exist "${SYSTEM_SERVICE_PATH}/${SERVICE_NAME}.service" "service file exists"
   if [ -n "`systemctl status $SERVICE_NAME 2>/dev/null`" ]; then
     error_exit "$SERVICE_NAME service already exists"
   fi
-  debug "check if the service command $COMMEND_NAME is available."
+  debug "check if the service command $COMMEND_NAME is available"
   assert_not_exist "${SYSTEM_COMMEND_PATH}/${COMMEND_NAME}" "command file exists"
   commend_flag="`type $COMMEND_NAME 2>/dev/null`"
   if [ -n "$commend_flag" ]; then
     error "$commend_flag"
     error_exit "command $COMMEND_NAME already exists"
+  fi
+}
+
+# Check the update environment
+# Check whether the update environment is complete and whether the updated command and service exist
+function check_update {
+  info "Begin checking update environment"
+  debug "check the update path"
+  if [ "$INSTALL_PATH" == "$CURRENT_PATH" ]; then
+    error_exit "the update path cannot be the current path"
+  elif [ ! -d "$INSTALL_PATH" ]; then
+    error_exit "$INSTALL_PATH the update path does not exist"
+  fi
+  debug "check if the $SERVICE_NAME service exists"
+  assert_exist "${SYSTEM_SERVICE_PATH}/${SERVICE_NAME}.service" "service file not exists"
+  if [ -z "`systemctl status $SERVICE_NAME 2>/dev/null`" ]; then
+    error_exit "$SERVICE_NAME service not exists"
+  fi
+  debug "check if the $SERVICE_NAME service is running"
+  if [ "`systemctl is-active $SERVICE_NAME 2>/dev/null`" == "active" ]; then
+    error_exit "$SERVICE_NAME service is running. Please close it and perform the update"
+  fi
+  debug "check if the service command $COMMEND_NAME is available"
+  assert_exist "${SYSTEM_COMMEND_PATH}/${COMMEND_NAME}" "command file not exists"
+  if [ -z "`type $COMMEND_NAME 2>/dev/null`" ]; then
+    error_exit "$SERVICE_NAME service not exists"
+  fi
+  debug "check the service version information"
+  if [[ "`$COMMEND_NAME -v | awk '{print $3}'`" == "$VERSION" ]]; then
+    error_exit "the current version is the same as the updated version"
   fi
 }
 
@@ -311,6 +356,60 @@ function install_service {
   debug "generate the Commend file: $path"
 }
 
+# Start update program
+function update_program {
+  info "Start update program"
+  path=$INSTALL_PATH/$SERVICE_FILE
+  if [ -e "$path" ]; then
+    flag=$[$flag+1]
+    warn "Service file will be overwritten: $path"
+  fi
+  for file in ${LIB_PATH//,/ };
+  do
+    path=$INSTALL_PATH/$file
+    if [ -e "$path" ]; then
+      flag=$[$flag+1]
+      warn "File or directory will be overwritten: $path"
+    fi
+  done
+  if [ "$flag" ]; then
+    echo -ne "The update will override the above \033[33m$flag\033[0m items. Are you sure to start updating? (Y/n)"
+    read arg
+    while true
+    do
+      if [[ "$arg" == "Y" ]]; then
+        break
+      elif [[ "$arg" == "n" ]]; then
+        error_exit "You canceled the update"
+      fi
+      echo -n "Are you sure to start updating? (Y/n)"
+      read arg
+    done
+  fi
+  copy_file $SERVICE_FILE
+  for file in ${LIB_PATH//,/ };
+  do
+    copy_file $file
+  done
+}
+
+# Start update services and program control commands
+function update_service {
+  info "Start update services and program control commands"
+  path="$SYSTEM_SERVICE_PATH/${SERVICE_NAME}.service"
+  echo "$(conetnt_replace "`cat ${CURRENT_PATH}/$SERVICE_TEMPLATE_FILE`")"  > $path
+  chmod u+x $path
+  systemctl daemon-reload
+  debug "update the Service file: $path"
+  path="$SYSTEM_COMMEND_PATH/$COMMEND_NAME"
+  help_content=$(conetnt_replace "`cat ${CURRENT_PATH}/$HELP_FILE`")
+  commend_content=$(conetnt_replace "`cat ${CURRENT_PATH}/$COMMEND_FILE`")
+  commend_content=${commend_content//'$HELP_CONTENT'/$help_content}
+  echo "$commend_content" > $path
+  chmod u+x $path
+  debug "update the Commend file: $path"
+}
+
 ##########################
 ## Clean up the installation environment
 
@@ -331,6 +430,7 @@ function clear_program {
 function clear_service {
   info "Begin cleaning up service and system commands"
   path="$SYSTEM_SERVICE_PATH/${SERVICE_NAME}.service"
+  rm -rf $SYSTEM_SERVICE_PATH/multi-user.target.wants/${SERVICE_NAME}.service
   if [ -e "$path" ]; then
     debug "clear the Service file"
     mkdir_dir $CURRENT_PATH/$CLEAR_BACKUP
@@ -358,20 +458,37 @@ function version {
 # Check the environment
 function check {
   check_program
-  check_system
-  info_print
-  success "All check the success"
+  if [ "$1" == "update" ]; then
+    check_update
+    info_print
+    success "Update environment check the success\n\n  Update command: $0 -u"
+  else
+    check_install
+    info_print
+    success "Install environment check the success\n\n  Install command: $0"
+  fi
 }
 
 # Install service
 function install {
   check_program
-  check_system
+  check_install
   info_print
   success "All inspection items have passed"
   install_program
   install_service
   success "Install the success"
+}
+
+# Update service
+function update {
+  check_program
+  check_update
+  info_print
+  success "All inspection items have passed"
+  update_program
+  update_service
+  success "Update the success"
 }
 
 # Print Help Information
@@ -401,7 +518,10 @@ case "$1" in
     version
     ;;
   '-c' | 'check')
-    check
+    check $2
+    ;;
+  '-u' | 'update')
+    update
     ;;
   '--clear-all')
     clear_all

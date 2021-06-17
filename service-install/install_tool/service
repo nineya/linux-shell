@@ -1,6 +1,6 @@
 [Unit]
 Description=$SERVICE_DESC
-Documentation=https://halo.run
+Documentation=https://blog.nineya.com
 After=network-online.target
 Wants=network-online.target
 

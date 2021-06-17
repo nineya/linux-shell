@@ -1,6 +1,15 @@
 #!/bin/bash
 function version {
-  echo -e "$SERVICE_NAME version \033[33m$VERSION\033[0m"
+  echo -e "$SERVICE_NAME version $VERSION"
+}
+
+function edit {
+  if [ `id -u` -ne 0 ]; then
+    echo -e "\033[31mUninstall requires a root account to continue\033[0m" 1>&2
+    exit 1
+  fi
+  vim $SYSTEM_SERVICE_PATH/$SERVICE_NAME.service
+  systemctl daemon-reload
 }
 
 function uninstall {
@@ -14,6 +23,7 @@ function uninstall {
     if [[ "$flag" =~ ^[Yy](es|ES){0,1}$ ]]; then
       rm -rf $INSTALL_PATH
       rm -rf $SYSTEM_SERVICE_PATH/$SERVICE_NAME.service
+      rm -ff $SYSTEM_SERVICE_PATH/multi-user.target.wants/$SERVICE_NAME.service
       systemctl daemon-reload
       rm -rf $SYSTEM_COMMEND_PATH/$COMMEND_NAME
       break
@@ -40,6 +50,9 @@ case "$1" in
     ;;
   '-v' | 'version')
     version
+    ;;
+  '-e' | 'edit')
+    edit
     ;;
   'uninstall')
     uninstall
