@@ -10,6 +10,8 @@ function edit {
   fi
   vim $SYSTEM_SERVICE_PATH/$SERVICE_NAME.service
   systemctl daemon-reload
+  echo "Service configuration modification successful"
+  echo -e "\033[33mThe service needs to be restarted to take effect\033[0m"
 }
 
 function uninstall {
