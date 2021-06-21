@@ -19,7 +19,11 @@ function uninstall {
     echo -e "\033[31mUninstall requires a root account to continue\033[0m" 1>&2
     exit 1
   fi
-  echo -e "The uninstall_path will delete the \033[33m$INSTALL_PATH\033[0m directory. Please make sure it can be removed"
+  if [ "`systemctl is-active $SERVICE_NAME 2>/dev/null`" == "active" ]; then
+    echo -e "\033[31m$SERVICE_NAME service is running, Please close it and perform the uninstall.\033[0m" 1>&2
+    exit 1
+  fi
+  echo -e "The uninstall_path will delete the \033[33m$INSTALL_PATH\033[0m directory. Please make sure it can be removed."
   while true
   do
     if [[ "$flag" =~ ^[Yy](es|ES){0,1}$ ]]; then
