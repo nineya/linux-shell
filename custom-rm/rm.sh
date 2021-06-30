@@ -67,7 +67,7 @@ do
     done
   elif [ -d "$s" ]; then
     path=$(cd $s; pwd)
-    path=${path%/*}
+    path=${path%/*}'/'
     new_path=${pathMap[$path]}
     if [ -z $new_path ]; then
       new_path=$(create_dir $STORE_HOME$path)
