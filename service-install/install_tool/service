@@ -6,6 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+SuccessExitStatus=143
 WorkingDirectory=$INSTALL_PATH
 ExecStart=$JAVA_BIN $JVM_OPTIONS -cp $INSTALL_PATH/lib/*:$INSTALL_PATH/$SERVICE_FILE $MAIN_FUNCTION $PROGRAM_ARGUMENTS
 ExecStop=/bin/kill -s QUIT $MAINPID
