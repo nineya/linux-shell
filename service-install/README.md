@@ -89,6 +89,8 @@ JVM_OPTIONS=-Xmx240m
 PROGRAM_ARGUMENTS=
 # 服务依赖的某些程序的路径，安装时需要一同安装，多个路径用“,”分隔
 LIB_PATH=lib/*
+# 服务更新时需要更新的依赖包，多个路径用“,”分隔
+UPDATE_PATH=
 # 服务安装后的管理命令，默认为$SERVICE_NAME
 COMMEND_NAME=blog
 ```

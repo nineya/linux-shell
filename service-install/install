@@ -155,6 +155,7 @@ function info_print {
   echo -e "     JVM Options\t:  $JVM_OPTIONS"
   echo -e "     Arguments  \t:  $PROGRAM_ARGUMENTS"
   echo -e "     Lib Path   \t:  $LIB_PATH"
+  echo -e "     Update Path   \t:  $UPDATE_PATH"
   echo -e "     Commend Name\t:  $COMMEND_NAME"
 }
 
@@ -270,7 +271,7 @@ function check_install {
     if [ "$INSTALL_PATH" == "$CURRENT_PATH" ]; then
       warn "the installation directory is the current directory"
     elif [ "$(ls -A $INSTALL_PATH)" ]; then
-      error_exit "$INSTALL_PATH the installation path is not Empty"
+      error_exit "$INSTALL_PATH the installation path is not empty"
     fi
   elif [ -e "$INSTALL_PATH" ]; then
     error_exit "$INSTALL_PATH: the installation path has a file of the same name"
@@ -315,7 +316,7 @@ function check_update {
   fi
   debug "check the service version information"
   if [[ "`$COMMEND_NAME -v | awk '{print $3}'`" == "$VERSION" ]]; then
-    error_exit "the current version is the same as the updated version"
+    warn "the current version is the same as the updated version"
   fi
 }
 
@@ -364,7 +365,7 @@ function update_program {
     flag=$[$flag+1]
     warn "Service file will be overwritten: $path"
   fi
-  for file in ${LIB_PATH//,/ };
+  for file in ${UPDATE_PATH//,/ };
   do
     path=$INSTALL_PATH/$file
     if [ -e "$path" ]; then
@@ -387,7 +388,7 @@ function update_program {
     done
   fi
   copy_file $SERVICE_FILE
-  for file in ${LIB_PATH//,/ };
+  for file in ${UPDATE_PATH//,/ };
   do
     copy_file $file
   done
